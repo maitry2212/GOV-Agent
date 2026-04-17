@@ -109,15 +109,6 @@ npm run dev
 
 The application will be available at `http://localhost:5173`.
 
----
-
-## 📸 Project Showcase
-
-*(Tip: You can add screenshots of your aesthetic UI here!)*
-
-- **Natural Language Input**: "How can I update my address in my Aadhaar card?"
-- **Real-time Progress**: Watch the agents move from research to verification.
-- **Authoritative Guides**: Receive a formatted guide with direct links to official portals.
 
 ---
 
