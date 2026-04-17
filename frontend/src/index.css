@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased;
+  }
+}
+
+.chat-bubble-user {
+  @apply bg-indigo-600 text-white rounded-2xl rounded-tr-none px-4 py-3 shadow-sm;
+}
+
+.chat-bubble-ai {
+  @apply bg-white text-gray-800 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm border border-gray-100;
+}
+
+.step-item {
+  @apply flex items-center text-xs font-medium text-gray-500 gap-2;
+}
+
+.step-indicator {
+  @apply h-2 w-2 rounded-full;
+}
+
+/* Custom transitions */
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
