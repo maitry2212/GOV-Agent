@@ -1,12 +1,22 @@
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
+from app.core.config import settings
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./sql_app.db"
+# Neon DB (PostgreSQL) connection URL — set DATABASE_URL in your .env file
+DATABASE_URL = settings.DATABASE_URL
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
+# Fix for SQLAlchemy connecting to Neon DB
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+if not DATABASE_URL:
+    raise ValueError(
+        "DATABASE_URL is not set. Please add your Neon DB connection string "
+        "to the .env file, e.g. DATABASE_URL=postgresql://user:pass@host/dbname?sslmode=require"
+    )
+
+# Neon uses PostgreSQL — no need for check_same_thread
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

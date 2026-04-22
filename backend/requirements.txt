@@ -8,12 +8,10 @@ langchain-tavily
 pydantic
 pydantic-settings
 tavily-python
-axios
-cors
 python-multipart
 langchain-community
 langchain-core
 groq
 langchain_groq
 sqlalchemy
-
+psycopg2-binary
