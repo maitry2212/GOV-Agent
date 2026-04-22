@@ -6,7 +6,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Indian Govt Services AI Research Agent"
-    API_V1_STR: str = "/api/v1"
+    API_V1_STR: str = ""
     
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
     TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "")
