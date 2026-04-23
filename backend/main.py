@@ -6,6 +6,9 @@ from app.core.config import settings
 from app.db.database import engine, Base
 from app.db import models
 
+# Drop and recreate all tables to apply new User model schema
+# IMPORTANT: Remove the drop_all line after first run to preserve data!
+Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(

@@ -1,7 +1,31 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
 
+# ───── Auth Schemas ─────
+class SignUpRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class SignInRequest(BaseModel):
+    email: str
+    password: str
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: "UserResponse"
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+
+    class Config:
+        from_attributes = True
+
+# ───── Chat Schemas ─────
 class MessageBase(BaseModel):
     role: str
     content: str

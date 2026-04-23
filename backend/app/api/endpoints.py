@@ -4,26 +4,84 @@ from typing import List
 from app.agents.research_agent import research_app
 from app.schemas.chat import (
     ChatRequest, ChatResponse, ChatSessionResponse, 
-    ChatSessionDetail, MessageResponse
+    ChatSessionDetail, MessageResponse,
+    SignUpRequest, SignInRequest, AuthResponse, UserResponse
 )
 from app.db.database import get_db
 from app.db import models
+from app.core.auth import (
+    hash_password, verify_password, create_access_token, get_current_user
+)
 
 router = APIRouter()
 
+# ───────────────────────────────────────────────
+#  AUTH ENDPOINTS
+# ───────────────────────────────────────────────
+
+@router.post("/auth/signup", response_model=AuthResponse)
+async def signup(request: SignUpRequest, db: Session = Depends(get_db)):
+    # Check if email already exists
+    existing_user = db.query(models.User).filter(models.User.email == request.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create user
+    user = models.User(
+        name=request.name,
+        email=request.email,
+        hashed_password=hash_password(request.password)
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    # Generate token
+    token = create_access_token({"user_id": user.id})
+    return AuthResponse(
+        access_token=token,
+        user=UserResponse.model_validate(user)
+    )
+
+@router.post("/auth/signin", response_model=AuthResponse)
+async def signin(request: SignInRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+    if not user or not verify_password(request.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    token = create_access_token({"user_id": user.id})
+    return AuthResponse(
+        access_token=token,
+        user=UserResponse.model_validate(user)
+    )
+
+@router.get("/auth/me", response_model=UserResponse)
+async def get_me(current_user: models.User = Depends(get_current_user)):
+    return current_user
+
+# ───────────────────────────────────────────────
+#  CHAT ENDPOINTS (Protected — user-scoped)
+# ───────────────────────────────────────────────
+
 @router.post("/chat", response_model=ChatResponse)
-async def process_chat(request: ChatRequest, db: Session = Depends(get_db)):
+async def process_chat(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     try:
         # 1. Handle Session
         if request.session_id:
-            session = db.query(models.ChatSession).filter(models.ChatSession.id == request.session_id).first()
+            session = db.query(models.ChatSession).filter(
+                models.ChatSession.id == request.session_id,
+                models.ChatSession.user_id == current_user.id  # Only own sessions
+            ).first()
             if not session:
                 raise HTTPException(status_code=404, detail="Session not found")
         else:
-            # Create new session
-            # Use query as initial title
+            # Create new session tied to the current user
             title = request.query[:30] + "..." if len(request.query) > 30 else request.query
-            session = models.ChatSession(title=title)
+            session = models.ChatSession(title=title, user_id=current_user.id)
             db.add(session)
             db.commit()
             db.refresh(session)
@@ -56,19 +114,39 @@ async def process_chat(request: ChatRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/sessions", response_model=List[ChatSessionResponse])
-async def get_sessions(db: Session = Depends(get_db)):
-    return db.query(models.ChatSession).order_by(models.ChatSession.created_at.desc()).all()
+async def get_sessions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    # Only return sessions belonging to the current user
+    return db.query(models.ChatSession).filter(
+        models.ChatSession.user_id == current_user.id
+    ).order_by(models.ChatSession.created_at.desc()).all()
 
 @router.get("/sessions/{session_id}", response_model=ChatSessionDetail)
-async def get_session_detail(session_id: int, db: Session = Depends(get_db)):
-    session = db.query(models.ChatSession).filter(models.ChatSession.id == session_id).first()
+async def get_session_detail(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    session = db.query(models.ChatSession).filter(
+        models.ChatSession.id == session_id,
+        models.ChatSession.user_id == current_user.id  # Only own sessions
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: int, db: Session = Depends(get_db)):
-    session = db.query(models.ChatSession).filter(models.ChatSession.id == session_id).first()
+async def delete_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    session = db.query(models.ChatSession).filter(
+        models.ChatSession.id == session_id,
+        models.ChatSession.user_id == current_user.id  # Only own sessions
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     db.delete(session)

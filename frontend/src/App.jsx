@@ -2,17 +2,21 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Send, Loader2, Info, CheckCircle2, ShieldCheck, 
   Globe, HelpCircle, User, Bot, LayoutTemplate, 
-  Plus, MessageSquare, Trash2, Menu, X
+  Plus, MessageSquare, Trash2, Menu, X, LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
   sendResearchQuery, getSessions, 
-  getSessionMessages, deleteSession 
+  getSessionMessages, deleteSession,
+  getStoredUser, getStoredToken, logout, getMe
 } from './services/api';
+import AuthPage from './components/AuthPage';
 
 const App = () => {
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -22,6 +26,26 @@ const App = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const messagesEndRef = useRef(null);
 
+  // Check for existing auth on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = getStoredToken();
+      const storedUser = getStoredUser();
+      if (token && storedUser) {
+        try {
+          // Validate token is still valid
+          await getMe();
+          setUser(storedUser);
+        } catch {
+          // Token expired or invalid, clear it
+          logout();
+        }
+      }
+      setAuthChecked(true);
+    };
+    checkAuth();
+  }, []);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -30,10 +54,25 @@ const App = () => {
     scrollToBottom();
   }, [messages, currentSteps]);
 
-  // Load available sessions on mount
+  // Load sessions when user is authenticated
   useEffect(() => {
-    fetchSessions();
-  }, []);
+    if (user) {
+      fetchSessions();
+    }
+  }, [user]);
+
+  const handleAuthSuccess = (userData) => {
+    setUser(userData);
+  };
+
+  const handleLogout = () => {
+    logout();
+    setUser(null);
+    setMessages([]);
+    setSessions([]);
+    setCurrentSessionId(null);
+    setCurrentSteps([]);
+  };
 
   const fetchSessions = async () => {
     try {
@@ -41,6 +80,10 @@ const App = () => {
       setSessions(data);
     } catch (error) {
       console.error("Failed to fetch sessions", error);
+      // If 401, user's token might be expired
+      if (error.response?.status === 401) {
+        handleLogout();
+      }
     }
   };
 
@@ -56,14 +99,13 @@ const App = () => {
     try {
       const data = await getSessionMessages(sessionId);
       setCurrentSessionId(data.id);
-      // Map database roles to UI message types
       const mappedMessages = data.messages.map(m => ({
         id: m.id,
         type: m.role === 'assistant' ? 'ai' : 'user',
         content: m.content
       }));
       setMessages(mappedMessages);
-      setCurrentSteps([]); // Clear steps for old sessions or could store them too
+      setCurrentSteps([]);
     } catch (error) {
       console.error("Failed to load session", error);
     } finally {
@@ -99,7 +141,6 @@ const App = () => {
       
       if (!result) throw new Error("No data received from server");
 
-      // Update session ID if it was a new chat
       if (!currentSessionId && result.session_id) {
         setCurrentSessionId(result.session_id);
         fetchSessions();
@@ -126,6 +167,21 @@ const App = () => {
     }
   };
 
+  // Show loading while checking auth
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950">
+        <Loader2 className="h-8 w-8 text-brand-secondary animate-spin" />
+      </div>
+    );
+  }
+
+  // Show auth page if not logged in
+  if (!user) {
+    return <AuthPage onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  // Main app (authenticated)
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Sidebar */}
@@ -174,19 +230,32 @@ const App = () => {
             ))}
           </div>
 
+          {/* User Profile & Logout */}
           <div className="mt-auto pt-6 border-t border-white/10 px-2 space-y-4">
-             <div className="flex items-center gap-3 opacity-60 hover:opacity-100 cursor-pointer transition-opacity">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-full bg-brand-secondary/20 border border-brand-secondary/30 flex items-center justify-center">
-                   <User className="h-4 w-4 text-brand-secondary" />
+                  <User className="h-4 w-4 text-brand-secondary" />
                 </div>
-                <span className="text-xs font-bold">Officer Account</span>
-             </div>
+                <div className="min-w-0">
+                  <span className="text-xs font-bold block truncate max-w-[140px]">{user.name}</span>
+                  <span className="text-[10px] text-white/40 block truncate max-w-[140px]">{user.email}</span>
+                </div>
+              </div>
+              <button
+                onClick={handleLogout}
+                title="Sign Out"
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/50 hover:text-red-400"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </motion.aside>
 
       <div className="flex-1 flex flex-col min-w-0 relative">
-        {/* Mobile Toggle & Header */}
+        {/* Header */}
         <header className="h-16 flex items-center justify-between px-6 bg-white border-b border-gray-100 shadow-sm z-10 shrink-0">
           <div className="flex items-center gap-4">
             <button 
@@ -232,7 +301,7 @@ const App = () => {
                   </motion.div>
                   <div className="space-y-2">
                     <h2 className="text-3xl font-bold tracking-tight text-gray-900 font-sans">
-                      Official <span className="text-brand-primary italic">Gov.in</span> Research
+                      Welcome, <span className="text-brand-primary italic">{user.name}</span>
                     </h2>
                     <p className="text-gray-500 font-medium">Enter your query to begin deep retrieval from official Indian government databases and procedure manuals.</p>
                   </div>
